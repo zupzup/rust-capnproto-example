@@ -3,6 +3,7 @@ use capnp::{
     serialize,
 };
 use serde::{Deserialize, Serialize};
+use std::time::Instant;
 use std::{env, fs};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -12,14 +13,21 @@ use tokio::{
 mod cats_capnp;
 
 #[derive(Serialize, Deserialize, Debug)]
+struct Address {
+    street: String,
+    number: u16,
+    postalcode: u16,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 struct Cat {
     name: String,
     age: u8,
     color: String,
     cuteness: f32,
+    addresses: Vec<Address>,
     image: Option<Vec<u8>>,
 }
-// TODO: add nested object
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -97,32 +105,42 @@ fn read_img() -> Vec<u8> {
 }
 
 // JSON
-// TODO: time
-fn build_msg_json(_img: &[u8]) -> Vec<u8> {
+fn build_msg_json(img: &[u8]) -> Vec<u8> {
+    let mut addresses = vec![];
+    for i in 0..10 {
+        addresses.push(Address {
+            street: String::from("some street"),
+            number: i,
+            postalcode: 1234,
+        });
+    }
     let cat = Cat {
         name: String::from("Minka"),
         age: 8,
         color: String::from("lucky"),
         cuteness: 100.0,
-        // image: Some(img.to_owned()),
-        image: None,
+        addresses,
+        image: Some(img.to_owned()),
+        // image: None,
     };
 
+    let start = Instant::now();
     let data = serde_json::to_vec(&cat).expect("can json serialize cat");
-    println!("data: {:?}", data);
+    let duration = start.elapsed();
+    println!("JSON SE: duration: {:?}, len: {}", duration, data.len());
     data
 }
 
-// TODO: time
 fn deserialize_json(data: &[u8]) {
+    let start = Instant::now();
     let cat: Cat = serde_json::from_slice(data).expect("can deserialize json");
-    println!("json cat: {:?}", cat);
+    let duration = start.elapsed();
+    println!("JSON DE: {}, duration: {:?}", cat.name, duration);
 }
 
 // CAPNPROTO
 
-// TODO: time
-fn build_msg(_img: &[u8]) -> Vec<u8> {
+fn build_msg(img: &[u8]) -> Vec<u8> {
     let mut msg = Builder::new_default();
 
     let mut cat = msg.init_root::<cats_capnp::cat::Builder>();
@@ -130,18 +148,36 @@ fn build_msg(_img: &[u8]) -> Vec<u8> {
     cat.set_age(8);
     cat.set_color("lucky");
     cat.set_cuteness(100.0);
-    // cat.set_image(img);
+    cat.set_image(img);
+    let mut addresses = cat.init_addresses(10);
+    {
+        for i in 0..10 {
+            let mut address = addresses.reborrow().get(i);
+            address.set_street("some street");
+            address.set_number(i as u8);
+            address.set_postalcode(1234);
+        }
+    }
 
+    let start = Instant::now();
     let data = serialize::write_message_to_words(&msg);
-    println!("data: {:?}", data);
+    let duration = start.elapsed();
+    println!("CAPNP SE: duration: {:?}, len: {}", duration, data.len());
     data
 }
 
-// TODO: time
 fn deserialize(data: &[u8]) {
+    let start = Instant::now();
+
     let reader = serialize::read_message(data, ReaderOptions::new()).expect("can create reader");
     let cat = reader
         .get_root::<cats_capnp::cat::Reader>()
         .expect("can deserialize cat");
-    println!("cat: {:?}", cat);
+
+    let duration = start.elapsed();
+    println!(
+        "CAPNP DE: {} duration: {:?}",
+        cat.get_name().unwrap(),
+        duration
+    );
 }

@@ -139,7 +139,7 @@ fn build_msg_json(img: &[u8]) -> Vec<u8> {
 
 fn deserialize_json(data: &[u8]) {
     let start = Instant::now();
-    let cat: Cat = serde_json::from_slice(data).expect("can drserialize json");
+    let cat: Cat = serde_json::from_slice(data).expect("can deserialize json");
     let mut decoded_img = Vec::new();
     if let Some(img) = cat.image {
         decoded_img = general_purpose::STANDARD_NO_PAD.decode(img).unwrap();

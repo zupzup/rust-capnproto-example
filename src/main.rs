@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose, Engine as _};
 use capnp::{
     message::{Builder, ReaderOptions},
     serialize,
@@ -26,13 +27,12 @@ struct Cat {
     color: String,
     cuteness: f32,
     addresses: Vec<Address>,
-    image: Option<Vec<u8>>,
-    // image: Option<String>, // TODO: try with base64
+    image: Option<String>,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let img = read_img();
+    let img = fs::read("./minka.jpg").expect("can load image");
 
     let args: Vec<String> = env::args().collect();
     if args.len() >= 2 {
@@ -108,10 +108,6 @@ async fn server(port: u16) -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-fn read_img() -> Vec<u8> {
-    fs::read("./minka.jpg").expect("can load image")
-}
-
 // JSON
 fn build_msg_json(img: &[u8]) -> Vec<u8> {
     let mut addresses = vec![];
@@ -122,13 +118,16 @@ fn build_msg_json(img: &[u8]) -> Vec<u8> {
             postalcode: 1234,
         });
     }
+
+    let encoded_img = general_purpose::STANDARD_NO_PAD.encode(img);
+
     let cat = Cat {
         name: String::from("Minka"),
         age: 8,
         color: String::from("lucky"),
         cuteness: 100.0,
         addresses,
-        image: Some(img.to_owned()),
+        image: Some(encoded_img),
     };
 
     let start = Instant::now();
@@ -140,9 +139,18 @@ fn build_msg_json(img: &[u8]) -> Vec<u8> {
 
 fn deserialize_json(data: &[u8]) {
     let start = Instant::now();
-    let cat: Cat = serde_json::from_slice(data).expect("can deserialize json");
+    let cat: Cat = serde_json::from_slice(data).expect("can drserialize json");
+    let mut decoded_img = Vec::new();
+    if let Some(img) = cat.image {
+        decoded_img = general_purpose::STANDARD_NO_PAD.decode(img).unwrap();
+    }
     let duration = start.elapsed();
-    println!("JSON DE: {}, duration: {:?}", cat.name, duration);
+    println!(
+        "JSON DE: {}, duration: {:?}, img len: {}",
+        cat.name,
+        duration,
+        decoded_img.len()
+    );
 }
 
 // CAPNPROTO
